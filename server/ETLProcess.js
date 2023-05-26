@@ -1,7 +1,10 @@
 const { Pool } = require('pg');
 require('dotenv').config();
-
+const fs = require('fs');
+const csv = require('csv-parser')
 const path = require('path');
+
+var finishCount = 0;
 
 const pool = new Pool ({
   user: process.env.ExistUser,
@@ -35,6 +38,7 @@ async function createDatabase() {
   }
 
 }
+
 
 
 async function createSchema() {
@@ -71,7 +75,7 @@ async function createSchema() {
       question_id integer PRIMARY KEY,
       product_id integer,
       question_body varchar(1000),
-      question_date varchar(20) DEFAULT CURRENT_TIMESTAMP,
+      question_date varchar(25) DEFAULT CURRENT_TIMESTAMP,
       asker_name varchar(60),
       asker_email varchar(320),
 
@@ -84,7 +88,7 @@ async function createSchema() {
       question_id integer,
 
       answer_body varchar(1000),
-      answer_date varchar(20) DEFAULT CURRENT_TIMESTAMP,
+      answer_date varchar(25) DEFAULT CURRENT_TIMESTAMP,
       answerer_name varchar(60),
       answerer_email varchar(320),
       reported boolean DEFAULT FALSE,
@@ -98,7 +102,7 @@ async function createSchema() {
       url varchar(2048),
       FOREIGN KEY (answer_id) REFERENCES ${process.env.Schema}.answers_list (answer_id)
     )`;
-    var finishCount = 0;
+
     await client.query(`DROP TABLE IF EXISTS ${process.env.Schema}.questions_list, ${process.env.Schema}.answers_list, ${process.env.Schema}.answers_photos`, async (err)=>{
 
       if (err) console.error ('err occured when dropping tables: ', err);
@@ -108,20 +112,16 @@ async function createSchema() {
           if (err) console.error ('err occured when creating TABLE (questions_list): ', err);
           else{
             console.log('questions_list created');
-            finishCount++;
-            if(finishCount === 3) {
-              await loadingData();
-            }
+            transformQuestionsData();
+
           }
         });
         await client.query(createAnswersListTableQuery, async (err)=>{
           if (err) console.error ('err occured when creating TABLE (answers_list): ', err);
           else{
             console.log('answers_list created');
-            finishCount++;
-            if(finishCount === 3) {
-              await loadingData();
-            }
+            transformAnswersData();
+
           }
 
         });
@@ -129,10 +129,8 @@ async function createSchema() {
           if (err) console.error ('err occured when creating TABLE (answers_photos): ', err);
           else{
             console.log('answers_photos created');
-            finishCount++;
-            if(finishCount === 3) {
-              await loadingData();
-            }
+            transformAnswersPhotosData();
+
           }
         });
       }}
@@ -155,7 +153,7 @@ async function createSchema() {
 
 async function loadingData() {
   try {
-    console.log('All tables created, start loading data into tables...')
+    console.log('All data transformed, start loading data into tables...')
     const newPool = new Pool({
       user: process.env.User,
       host: process.env.Host,
@@ -168,14 +166,14 @@ async function loadingData() {
     const client = await newPool.connect();
 
     //load data to questions list
-    console.log(`Extracting from ${path.join(__dirname, './../csv/questions.csv')} ...`);
+    console.log(`Extracting from ${path.join(__dirname, './../csv/tempQuestions.csv')} ...`);
     var startTime = performance.now();
     await client.query('BEGIN');
 
     var tableName = `${process.env.Schema}.questions_list`;
-    var filePath = path.join(__dirname, './../csv/questions.csv');
+    var filePath = path.join(__dirname, './../csv/tempQuestions.csv');
 
-    var copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV HEADER`;
+    var copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV`;
 
     await client.query(copyCommand);
 
@@ -185,14 +183,14 @@ async function loadingData() {
     console.log(`Data loaded to questions_list, time used: ${time} seconds`);
 
      //load data to answers list
-     console.log(`Extracting from ${path.join(__dirname, './../csv/answers.csv')} ...`);
+     console.log(`Extracting from ${path.join(__dirname, './../csv/tempAnswers.csv')} ...`);
      startTime = performance.now();
      await client.query('BEGIN');
 
      tableName = `${process.env.Schema}.answers_list`;
-     filePath = path.join(__dirname, './../csv/answers.csv');
+     filePath = path.join(__dirname, './../csv/tempAnswers.csv');
 
-     copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV HEADER`;
+     copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV`;
 
      await client.query(copyCommand);
 
@@ -203,14 +201,14 @@ async function loadingData() {
 
 
      //load data to answers photos
-     console.log(`Extracting from ${path.join(__dirname, './../csv/answers_photos.csv')} ...`);
+     console.log(`Extracting from ${path.join(__dirname, './../csv/tempAnswers_photos.csv')} ...`);
      startTime = performance.now();
      await client.query('BEGIN');
 
      tableName = `${process.env.Schema}.answers_photos`;
-     filePath = path.join(__dirname, './../csv/answers_photos.csv');
+     filePath = path.join(__dirname, './../csv/tempAnswers_photos.csv');
 
-     copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV HEADER`;
+     copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV`;
 
      await client.query(copyCommand);
 
@@ -225,10 +223,140 @@ async function loadingData() {
 
     console.error('Error occurred: ', error);
   } finally {
-    console.log('All data loaded!')
+    console.log('All data loaded!');
+
+    fs.unlink(path.join(__dirname, './../csv/tempQuestions.csv'), (err) =>{
+      if (err) {
+        console.error('Error deleting file:', err);
+        return;
+      }
+    })
+    fs.unlink(path.join(__dirname, './../csv/tempAnswers.csv'), (err) =>{
+      if (err) {
+        console.error('Error deleting file:', err);
+        return;
+      }
+    })
+    fs.unlink(path.join(__dirname, './../csv/tempAnswers_photos.csv'), (err) =>{
+      if (err) {
+        console.error('Error deleting file:', err);
+        return;
+      }
+    })
+    console.log('All temp files deleted!');
   }
 }
 
+
+
+async function transformQuestionsData (){
+  const fromPath = path.join(__dirname, './../csv/questions.csv');
+  const toPath = path.join(__dirname, './../csv/tempQuestions.csv');
+
+  console.log('questions transforming...')
+
+  if(fs.existsSync(toPath)) {
+    fs.unlink(toPath, (err) =>{
+      if (err) {
+        console.error('Error deleting file:', err);
+        return;
+      }
+    });
+  }
+
+  fs.writeFileSync(toPath, '');
+
+  const writeStream = fs.createWriteStream(toPath, {flag:'a'});
+
+  fs.createReadStream(fromPath)
+  .pipe(csv())
+  .on('data', (data) =>{
+    let time = new Date(parseInt(data.date_written)).toISOString();
+    data.date_written = time;
+    writeStream.write(`${data.id},${data.product_id},"${data.body}","${data.date_written}","${data.asker_name}","${data.asker_email}",${data.reported},${data.helpful}\n`)
+  })
+  .on('end', async ()=> {
+
+    console.log(`Data transformed, location: ${toPath}`);
+
+    finishCount++;
+    if(finishCount === 3) {
+      await loadingData();
+    }
+
+  })
+
+}
+
+async function transformAnswersData (){
+  const fromPath = path.join(__dirname, './../csv/answers.csv');
+  const toPath = path.join(__dirname, './../csv/tempAnswers.csv');
+  console.log('answers transforming...')
+  if(fs.existsSync(toPath)) {
+    fs.unlink(toPath, (err) =>{
+      if (err) {
+        console.error('Error deleting file:', err);
+        return;
+      }
+    });
+  }
+  fs.writeFileSync(toPath, '');
+
+  const writeStream = fs.createWriteStream(toPath, {flag:'a'});
+
+  fs.createReadStream(fromPath)
+  .pipe(csv())
+  .on('data', (data) =>{
+    let time = new Date(parseInt(data.date_written)).toISOString();
+    data.date_written = time;
+
+    writeStream.write(`${data.id},${data.question_id},"${data.body}","${data.date_written}","${data.answerer_name}","${data.answerer_email}",${data.reported},${data.helpful}\n`);
+
+  })
+  .on('end', async ()=> {
+
+    console.log(`Answers data transformed, location: ${toPath}`);
+
+    finishCount++;
+            if(finishCount === 3) {
+              await loadingData();
+            }
+
+  })
+
+}
+
+async function transformAnswersPhotosData (){
+  const fromPath = path.join(__dirname, './../csv/answers_photos.csv');
+  const toPath = path.join(__dirname, './../csv/tempAnswers_photos.csv');
+  console.log('answers photos transforming...')
+  if(fs.existsSync(toPath)) {
+    fs.unlink(toPath, (err) =>{
+      if (err) {
+        console.error('Error deleting file:', err);
+        return;
+      }
+    });
+  }
+  fs.writeFileSync(toPath, '');
+
+  const writeStream = fs.createWriteStream(toPath, {flag:'a'});
+
+  fs.createReadStream(fromPath)
+  .pipe(csv())
+  .on('data', (data) =>{
+    writeStream.write(`${data.id},${data.answer_id},"${data.url}"\n`);
+  })
+  .on('end', async ()=> {
+    console.log(`Answers photos data transformed, location: ${toPath}`);
+
+    finishCount++;
+    if(finishCount === 3) {
+      await loadingData();
+    }
+  })
+
+}
 
 
 
