@@ -1,45 +1,44 @@
-const { Pool } = require('pg');
-require('dotenv').config();
-const fs = require('fs');
-const csv = require('csv-parser')
-const path = require('path');
+const { Pool } = require("pg");
+require("dotenv").config();
+const fs = require("fs");
+const csv = require("csv-parser");
+const path = require("path");
 
 var finishCount = 0;
 
-const pool = new Pool ({
+const pool = new Pool({
   user: process.env.ExistUser,
   host: process.env.Host,
   database: process.env.ExistDatabase,
   password: process.env.Password,
-  port :process.env.Port
+  port: process.env.Port,
 });
 
 async function createDatabase() {
-
   try {
     const client = await pool.connect();
 
     const databaseExistsQuery = `SELECT datname FROM pg_database WHERE datname = '${process.env.Database}'`;
     const databaseExistsResult = await client.query(databaseExistsQuery);
 
-    if(databaseExistsResult.rows.length === 0) {
-
+    if (databaseExistsResult.rows.length === 0) {
       await client.query(`CREATE DATABASE  ${process.env.Database}`);
-      console.log(`New database (${process.env.Database}) created successfully!`);
+      console.log(
+        `New database (${process.env.Database}) created successfully!`
+      );
     } else {
-      console.log(`Database '${process.env.Database}' already exists, creating schema...`);
+      console.log(
+        `Database '${process.env.Database}' already exists, creating schema...`
+      );
     }
 
     client.release();
   } catch (error) {
-    console.error('Error occurred: ', error);
+    console.error("Error occurred: ", error);
   } finally {
     createSchema();
   }
-
 }
-
-
 
 async function createSchema() {
   try {
@@ -48,8 +47,7 @@ async function createSchema() {
       host: process.env.Host,
       database: process.env.Database,
       password: process.env.Password,
-      port :process.env.Port
-
+      port: process.env.Port,
     });
 
     const client = await newPool.connect();
@@ -62,17 +60,18 @@ async function createSchema() {
 
     const schemaExistsResult = await client.query(schemaExistsQuery);
 
-    if(schemaExistsResult.rows.length === 0) {
-
+    if (schemaExistsResult.rows.length === 0) {
       await client.query(`CREATE SCHEMA ${process.env.Schema}`);
 
       console.log(`New schema (${process.env.Schema}) created successfully`);
     } else {
-      console.log(`Schema '${process.env.Schema}' already exists, creating tables...`);
+      console.log(
+        `Schema '${process.env.Schema}' already exists, creating tables...`
+      );
     }
 
     const createQuestionsListTableQuery = `CREATE TABLE IF NOT EXISTS ${process.env.Schema}.questions_list (
-      question_id integer PRIMARY KEY,
+      question_id SERIAL PRIMARY KEY,
       product_id integer,
       question_body varchar(1000),
       question_date varchar(25) DEFAULT CURRENT_TIMESTAMP,
@@ -103,261 +102,266 @@ async function createSchema() {
       FOREIGN KEY (answer_id) REFERENCES ${process.env.Schema}.answers_list (answer_id)
     )`;
 
-    await client.query(`DROP TABLE IF EXISTS ${process.env.Schema}.questions_list, ${process.env.Schema}.answers_list, ${process.env.Schema}.answers_photos`, async (err)=>{
-
-      if (err) console.error ('err occured when dropping tables: ', err);
-      else {
-
-        await client.query(createQuestionsListTableQuery, async (err)=>{
-          if (err) console.error ('err occured when creating TABLE (questions_list): ', err);
-          else{
-            console.log('questions_list created');
-            transformQuestionsData();
-
-          }
-        });
-        await client.query(createAnswersListTableQuery, async (err)=>{
-          if (err) console.error ('err occured when creating TABLE (answers_list): ', err);
-          else{
-            console.log('answers_list created');
-            transformAnswersData();
-
-          }
-
-        });
-        await client.query(createAnswersPhotosTableQuery, async (err)=>{
-          if (err) console.error ('err occured when creating TABLE (answers_photos): ', err);
-          else{
-            console.log('answers_photos created');
-            transformAnswersPhotosData();
-
-          }
-        });
-      }}
+    await client.query(
+      `DROP TABLE IF EXISTS ${process.env.Schema}.questions_list, ${process.env.Schema}.answers_list, ${process.env.Schema}.answers_photos`,
+      async (err) => {
+        if (err) console.error("err occured when dropping tables: ", err);
+        else {
+          await client.query(createQuestionsListTableQuery, async (err) => {
+            if (err)
+              console.error(
+                "err occured when creating TABLE (questions_list): ",
+                err
+              );
+            else {
+              console.log("questions_list created");
+              transformQuestionsData();
+            }
+          });
+          await client.query(createAnswersListTableQuery, async (err) => {
+            if (err)
+              console.error(
+                "err occured when creating TABLE (answers_list): ",
+                err
+              );
+            else {
+              console.log("answers_list created");
+              transformAnswersData();
+            }
+          });
+          await client.query(createAnswersPhotosTableQuery, async (err) => {
+            if (err)
+              console.error(
+                "err occured when creating TABLE (answers_photos): ",
+                err
+              );
+            else {
+              console.log("answers_photos created");
+              transformAnswersPhotosData();
+            }
+          });
+        }
+      }
     );
 
-
-
-
-      client.release();
+    client.release();
   } catch (error) {
-
-    console.error('Error occurred: ', error);
+    console.error("Error occurred: ", error);
   } finally {
-
     pool.end();
-
   }
 }
 
-
 async function loadingData() {
   try {
-    console.log('All data transformed, start loading data into tables...')
+    console.log("All data transformed, start loading data into tables...");
     const newPool = new Pool({
       user: process.env.User,
       host: process.env.Host,
       database: process.env.Database,
       password: process.env.Password,
-      port :process.env.Port
-
+      port: process.env.Port,
     });
 
     const client = await newPool.connect();
 
     //load data to questions list
-    console.log(`Extracting from ${path.join(__dirname, './../csv/tempQuestions.csv')} ...`);
+    console.log(
+      `Extracting from ${path.join(
+        __dirname,
+        "./../csv/tempQuestions.csv"
+      )} ...`
+    );
     var startTime = performance.now();
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     var tableName = `${process.env.Schema}.questions_list`;
-    var filePath = path.join(__dirname, './../csv/tempQuestions.csv');
+    var filePath = path.join(__dirname, "./../csv/tempQuestions.csv");
 
     var copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV`;
 
     await client.query(copyCommand);
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
     var endTime = performance.now();
-    var time = ((endTime - startTime)/1000).toFixed(3);
+    var time = ((endTime - startTime) / 1000).toFixed(3);
     console.log(`Data loaded to questions_list, time used: ${time} seconds`);
 
-     //load data to answers list
-     console.log(`Extracting from ${path.join(__dirname, './../csv/tempAnswers.csv')} ...`);
-     startTime = performance.now();
-     await client.query('BEGIN');
+    //load data to answers list
+    console.log(
+      `Extracting from ${path.join(__dirname, "./../csv/tempAnswers.csv")} ...`
+    );
+    startTime = performance.now();
+    await client.query("BEGIN");
 
-     tableName = `${process.env.Schema}.answers_list`;
-     filePath = path.join(__dirname, './../csv/tempAnswers.csv');
+    tableName = `${process.env.Schema}.answers_list`;
+    filePath = path.join(__dirname, "./../csv/tempAnswers.csv");
 
-     copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV`;
+    copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV`;
 
-     await client.query(copyCommand);
+    await client.query(copyCommand);
 
-     await client.query('COMMIT');
-     endTime = performance.now();
-     time = ((endTime - startTime)/1000).toFixed(3);
-     console.log(`Data loaded to answers_list, time used: ${time} seconds`);
+    await client.query("COMMIT");
+    endTime = performance.now();
+    time = ((endTime - startTime) / 1000).toFixed(3);
+    console.log(`Data loaded to answers_list, time used: ${time} seconds`);
 
+    //load data to answers photos
+    console.log(
+      `Extracting from ${path.join(
+        __dirname,
+        "./../csv/tempAnswers_photos.csv"
+      )} ...`
+    );
+    startTime = performance.now();
+    await client.query("BEGIN");
 
-     //load data to answers photos
-     console.log(`Extracting from ${path.join(__dirname, './../csv/tempAnswers_photos.csv')} ...`);
-     startTime = performance.now();
-     await client.query('BEGIN');
+    tableName = `${process.env.Schema}.answers_photos`;
+    filePath = path.join(__dirname, "./../csv/tempAnswers_photos.csv");
 
-     tableName = `${process.env.Schema}.answers_photos`;
-     filePath = path.join(__dirname, './../csv/tempAnswers_photos.csv');
+    copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV`;
 
-     copyCommand = `COPY ${tableName} FROM '${filePath}' DELIMITER ',' CSV`;
+    await client.query(copyCommand);
 
-     await client.query(copyCommand);
-
-     await client.query('COMMIT');
-     endTime = performance.now();
-     time = ((endTime - startTime)/1000).toFixed(3);
-     console.log(`Data loaded to answers_photos, time used: ${time} seconds`);
-
+    await client.query("COMMIT");
+    endTime = performance.now();
+    time = ((endTime - startTime) / 1000).toFixed(3);
+    console.log(`Data loaded to answers_photos, time used: ${time} seconds`);
 
     client.release();
   } catch (error) {
-
-    console.error('Error occurred: ', error);
+    console.error("Error occurred: ", error);
   } finally {
-    console.log('All data loaded!');
+    console.log("All data loaded!");
 
-    fs.unlink(path.join(__dirname, './../csv/tempQuestions.csv'), (err) =>{
+    fs.unlink(path.join(__dirname, "./../csv/tempQuestions.csv"), (err) => {
       if (err) {
-        console.error('Error deleting file:', err);
+        console.error("Error deleting file:", err);
         return;
       }
-    })
-    fs.unlink(path.join(__dirname, './../csv/tempAnswers.csv'), (err) =>{
+    });
+    fs.unlink(path.join(__dirname, "./../csv/tempAnswers.csv"), (err) => {
       if (err) {
-        console.error('Error deleting file:', err);
+        console.error("Error deleting file:", err);
         return;
       }
-    })
-    fs.unlink(path.join(__dirname, './../csv/tempAnswers_photos.csv'), (err) =>{
-      if (err) {
-        console.error('Error deleting file:', err);
-        return;
+    });
+    fs.unlink(
+      path.join(__dirname, "./../csv/tempAnswers_photos.csv"),
+      (err) => {
+        if (err) {
+          console.error("Error deleting file:", err);
+          return;
+        }
       }
-    })
-    console.log('All temp files deleted!');
+    );
+    console.log("All temp files deleted!");
   }
 }
 
+async function transformQuestionsData() {
+  const fromPath = path.join(__dirname, "./../csv/questions.csv");
+  const toPath = path.join(__dirname, "./../csv/tempQuestions.csv");
 
+  console.log("questions transforming...");
 
-async function transformQuestionsData (){
-  const fromPath = path.join(__dirname, './../csv/questions.csv');
-  const toPath = path.join(__dirname, './../csv/tempQuestions.csv');
-
-  console.log('questions transforming...')
-
-  if(fs.existsSync(toPath)) {
-    fs.unlink(toPath, (err) =>{
+  if (fs.existsSync(toPath)) {
+    fs.unlink(toPath, (err) => {
       if (err) {
-        console.error('Error deleting file:', err);
+        console.error("Error deleting file:", err);
         return;
       }
     });
   }
 
-  fs.writeFileSync(toPath, '');
+  fs.writeFileSync(toPath, "");
 
-  const writeStream = fs.createWriteStream(toPath, {flag:'a'});
+  const writeStream = fs.createWriteStream(toPath, { flag: "a" });
 
   fs.createReadStream(fromPath)
-  .pipe(csv())
-  .on('data', (data) =>{
-    let time = new Date(parseInt(data.date_written)).toISOString();
-    data.date_written = time;
-    writeStream.write(`${data.id},${data.product_id},"${data.body}","${data.date_written}","${data.asker_name}","${data.asker_email}",${data.reported},${data.helpful}\n`)
-  })
-  .on('end', async ()=> {
+    .pipe(csv())
+    .on("data", (data) => {
+      let time = new Date(parseInt(data.date_written)).toISOString();
+      data.date_written = time;
+      writeStream.write(
+        `${data.id},${data.product_id},"${data.body}","${data.date_written}","${data.asker_name}","${data.asker_email}",${data.reported},${data.helpful}\n`
+      );
+    })
+    .on("end", async () => {
+      console.log(`Data transformed, location: ${toPath}`);
 
-    console.log(`Data transformed, location: ${toPath}`);
-
-    finishCount++;
-    if(finishCount === 3) {
-      await loadingData();
-    }
-
-  })
-
+      finishCount++;
+      if (finishCount === 3) {
+        await loadingData();
+      }
+    });
 }
 
-async function transformAnswersData (){
-  const fromPath = path.join(__dirname, './../csv/answers.csv');
-  const toPath = path.join(__dirname, './../csv/tempAnswers.csv');
-  console.log('answers transforming...')
-  if(fs.existsSync(toPath)) {
-    fs.unlink(toPath, (err) =>{
+async function transformAnswersData() {
+  const fromPath = path.join(__dirname, "./../csv/answers.csv");
+  const toPath = path.join(__dirname, "./../csv/tempAnswers.csv");
+  console.log("answers transforming...");
+  if (fs.existsSync(toPath)) {
+    fs.unlink(toPath, (err) => {
       if (err) {
-        console.error('Error deleting file:', err);
+        console.error("Error deleting file:", err);
         return;
       }
     });
   }
-  fs.writeFileSync(toPath, '');
+  fs.writeFileSync(toPath, "");
 
-  const writeStream = fs.createWriteStream(toPath, {flag:'a'});
+  const writeStream = fs.createWriteStream(toPath, { flag: "a" });
 
   fs.createReadStream(fromPath)
-  .pipe(csv())
-  .on('data', (data) =>{
-    let time = new Date(parseInt(data.date_written)).toISOString();
-    data.date_written = time;
+    .pipe(csv())
+    .on("data", (data) => {
+      let time = new Date(parseInt(data.date_written)).toISOString();
+      data.date_written = time;
 
-    writeStream.write(`${data.id},${data.question_id},"${data.body}","${data.date_written}","${data.answerer_name}","${data.answerer_email}",${data.reported},${data.helpful}\n`);
+      writeStream.write(
+        `${data.id},${data.question_id},"${data.body}","${data.date_written}","${data.answerer_name}","${data.answerer_email}",${data.reported},${data.helpful}\n`
+      );
+    })
+    .on("end", async () => {
+      console.log(`Answers data transformed, location: ${toPath}`);
 
-  })
-  .on('end', async ()=> {
-
-    console.log(`Answers data transformed, location: ${toPath}`);
-
-    finishCount++;
-            if(finishCount === 3) {
-              await loadingData();
-            }
-
-  })
-
+      finishCount++;
+      if (finishCount === 3) {
+        await loadingData();
+      }
+    });
 }
 
-async function transformAnswersPhotosData (){
-  const fromPath = path.join(__dirname, './../csv/answers_photos.csv');
-  const toPath = path.join(__dirname, './../csv/tempAnswers_photos.csv');
-  console.log('answers photos transforming...')
-  if(fs.existsSync(toPath)) {
-    fs.unlink(toPath, (err) =>{
+async function transformAnswersPhotosData() {
+  const fromPath = path.join(__dirname, "./../csv/answers_photos.csv");
+  const toPath = path.join(__dirname, "./../csv/tempAnswers_photos.csv");
+  console.log("answers photos transforming...");
+  if (fs.existsSync(toPath)) {
+    fs.unlink(toPath, (err) => {
       if (err) {
-        console.error('Error deleting file:', err);
+        console.error("Error deleting file:", err);
         return;
       }
     });
   }
-  fs.writeFileSync(toPath, '');
+  fs.writeFileSync(toPath, "");
 
-  const writeStream = fs.createWriteStream(toPath, {flag:'a'});
+  const writeStream = fs.createWriteStream(toPath, { flag: "a" });
 
   fs.createReadStream(fromPath)
-  .pipe(csv())
-  .on('data', (data) =>{
-    writeStream.write(`${data.id},${data.answer_id},"${data.url}"\n`);
-  })
-  .on('end', async ()=> {
-    console.log(`Answers photos data transformed, location: ${toPath}`);
+    .pipe(csv())
+    .on("data", (data) => {
+      writeStream.write(`${data.id},${data.answer_id},"${data.url}"\n`);
+    })
+    .on("end", async () => {
+      console.log(`Answers photos data transformed, location: ${toPath}`);
 
-    finishCount++;
-    if(finishCount === 3) {
-      await loadingData();
-    }
-  })
-
+      finishCount++;
+      if (finishCount === 3) {
+        await loadingData();
+      }
+    });
 }
-
-
 
 createDatabase();
