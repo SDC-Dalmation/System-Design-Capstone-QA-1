@@ -10,9 +10,19 @@ async function databaseConnection() {
   const Password = process.env.Password;
 
   // const sequelize = new Sequelize('postgres://user:pass@example.com:5432/dbname') // Example for postgres
-  return new Sequelize(
-    `postgres://${User}:${Password}@${Host}:${Port}/${Database}`
-  );
+  // return new Sequelize(
+  //   `postgres://${User}:${Password}@${Host}:${Port}/${Database}`
+  // );
+
+  return new Sequelize(Database, User, Password, {
+    host: Host,
+    dialect: 'postgres',
+    benchmark: true,
+    logging(sql, timing) {
+      console.log(`[Execution time: ${timing}ms]
+       -  ${sql} \n`)
+ },
+})
 
   // /You can use the .authenticate() function to test if the connection is OK:
   // try {
@@ -183,19 +193,11 @@ module.exports = {
                 answersPhotosTableConn(sequelize)
                   .then((answersPhotos) => {
                     var response = {};
-                    questionsList.hasMany(answersList, {
-                      foreignKey: "question_id",
-                    });
-                    answersList.belongsTo(questionsList, {
-                      foreignKey: "question_id",
-                    });
+                    questionsList.hasMany(answersList, {foreignKey: "question_id"});
+                    answersList.belongsTo(questionsList, {foreignKey: "question_id"});
 
-                    answersList.hasMany(answersPhotos, {
-                      foreignKey: "answer_id",
-                    });
-                    answersPhotos.belongsTo(answersList, {
-                      foreignKey: "answer_id",
-                    });
+                    answersList.hasMany(answersPhotos, {foreignKey: "answer_id",});
+                    answersPhotos.belongsTo(answersList, {foreignKey: "answer_id",});
 
                     questionsList
                       .findAll({
@@ -215,6 +217,7 @@ module.exports = {
                         response.results = [];
 
                         result.map((e) => {
+
                           let data = {};
                           data.question_id = e.dataValues.question_id;
                           data.question_body = e.dataValues.question_body;
