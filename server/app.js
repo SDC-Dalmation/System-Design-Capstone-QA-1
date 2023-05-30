@@ -7,9 +7,9 @@ let app = express();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../client/dist")));
-
+app.use(express.json())
 app.get("/qa/questions", (req, res) => {
-
+  console.log(req.query)
   routes.getQuestions(req, res);
 
 });

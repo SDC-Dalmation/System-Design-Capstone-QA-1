@@ -21,7 +21,7 @@ async function databaseConnection() {
     logging(sql, timing) {
       console.log(`[Execution time: ${timing}ms]
        -  ${sql} \n`)
- },
+ }
 })
 
   // /You can use the .authenticate() function to test if the connection is OK:
@@ -76,6 +76,7 @@ async function questionsListTableConn(sequelize) {
           schema: process.env.Schema, // Replace with your schema name
           tableName: "questions_list", // Replace with your table name
           timestamps: false,
+          indexes: [{ unique: true, fields: ['question_id'] }, { unique: false, fields: ['product_id'] }]
         }
       );
     })
@@ -130,6 +131,7 @@ async function answersListTableConn(sequelize) {
           schema: process.env.Schema, // Replace with your schema name
           tableName: "answers_list", // Replace with your table name
           timestamps: false,
+          indexes: [{ unique: false, fields: ['question_id'] }, {unique: true, fields: ['answer_id']}]
         }
       );
     })
@@ -165,6 +167,7 @@ async function answersPhotosTableConn(sequelize) {
           schema: process.env.Schema, // Replace with your schema name
           tableName: "answers_photos", // Replace with your table name
           timestamps: false,
+          indexes: [{ unique: false, fields: ['answer_id'] }]
         }
       );
     })
@@ -175,14 +178,14 @@ async function answersPhotosTableConn(sequelize) {
 
 module.exports = {
   getQuestions: (req, res) => {
-    if (!req.body.product_id || req.body.product_id > 2147483647) {
+    if (!req.query.product_id || req.query.product_id > 2147483647) {
       return res.status(400).send("invalid product id");
     }
 
-    var page = req.body.page || 1;
-    var count = req.body.count || 5;
+    var page = req.query.page || 1;
+    var count = req.query.count || 5;
     var offset = Math.abs((page - 1) * count);
-    var product_id = req.body.product_id;
+    var product_id = req.query.product_id;
 
     databaseConnection()
       .then((sequelize) => {
@@ -254,6 +257,8 @@ module.exports = {
                           response.results.push(data);
                         });
                         res.send(response);
+
+                        sequelize.close()
                       });
                   })
                   .catch((err) => console.log(err));

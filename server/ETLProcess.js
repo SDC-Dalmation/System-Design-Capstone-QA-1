@@ -110,23 +110,43 @@ async function createSchema() {
           await client.query(createQuestionsListTableQuery, async (err) => {
             if (err)
               console.error(
-                "err occured when creating TABLE (questions_list): ",
-                err
-              );
+                "err occured when creating TABLE (questions_list): ", err);
             else {
               console.log("questions_list created");
-              transformQuestionsData();
+
+              let createQuesntionsListIndex =`CREATE INDEX idx_product_id
+              ON ${process.env.Schema}.questions_list (product_id)`
+              client.query(createQuesntionsListIndex, async(err) => {
+                if (err)
+              console.error(
+                "err occured when creating TABLE TABLE INDEX (questions_list): ", err);
+                transformQuestionsData();
+
+              })
+
+
             }
           });
           await client.query(createAnswersListTableQuery, async (err) => {
             if (err)
               console.error(
-                "err occured when creating TABLE (answers_list): ",
+                "err occured when creating TABLE INDEX TABLE (answers_list): ",
                 err
               );
             else {
               console.log("answers_list created");
-              transformAnswersData();
+              let createAnswersListIndex =`CREATE INDEX idx_question_id
+              ON ${process.env.Schema}.answers_list (question_id)`
+
+              client.query(createAnswersListIndex, async(err) => {
+                if (err)
+              console.error(
+                "err occured when creating TABLE INDEX (answers_list): ", err);
+                transformAnswersData();
+
+              })
+
+
             }
           });
           await client.query(createAnswersPhotosTableQuery, async (err) => {
@@ -136,8 +156,17 @@ async function createSchema() {
                 err
               );
             else {
-              console.log("answers_photos created");
-              transformAnswersPhotosData();
+              let createAnswersPhotosIndex =`CREATE INDEX idx_answer_id
+              ON ${process.env.Schema}.answers_photos (answer_id)`
+
+              client.query(createAnswersPhotosIndex, async(err) => {
+                if (err) console.error("err occured when creating TABLE INDEX TABLE (answers_photos): ", err);
+                console.log("answers_photos created");
+                transformAnswersPhotosData();
+
+              })
+
+
             }
           });
         }
